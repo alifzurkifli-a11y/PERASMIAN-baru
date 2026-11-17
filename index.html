@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulasi 3D Sistem Pencernaan Manusia</title>
+    <!-- Tailwind CSS untuk penggayaan UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js untuk enjin grafik 3D -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Font Inter dan Font Awesome -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            overflow-x: hidden;
+        }
+        
+        /* Bekas kanvas 3D */
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            max-height: 75vh;
+            background: radial-gradient(circle at center, #1e293b 0%, #090d16 100%);
+            border-radius: 1rem;
+            box-shadow: inset 0 2px 15px rgba(0,0,0,0.4);
+            overflow: hidden;
+            touch-action: none; /* Mengelakkan tatalan halaman semasa memutar 3D di telefon */
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        canvas:active {
+            cursor: grabbing;
+        }
+
+        .organ-badge {
+            transition: all 0.2s ease;
+        }
+        .organ-badge:hover {
+            transform: translateY(-2px);
+        }
+        .organ-badge.active {
+            background-color: #eff6ff;
+            border-color: #3b82f6;
+            color: #1d4ed8;
+            box-shadow: 0 2px 6px rgba(59, 130, 246, 0.2);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+    </style>
+</head>
+<body class="text-slate-800 bg-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header Aplikasi -->
+    <header class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center gap-3">
+                <div class="bg-gradient-to-br from-rose-500 to-orange-500 text-white p-2.5 rounded-xl shadow-md">
+                    <i class="fa-solid fa-cube text-xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold text-slate-900 leading-tight">Sistem Pencernaan Manusia</h1>
+                        <span class="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-700 rounded-md">Mod 3D</span>
+                    </div>
+                    <p class="text-xs text-slate-500">Simulasi Anatomi & Perjalanan Makanan Interaktif</p>
+                </div>
+            </div>
+            
+            <!-- Pemilihan Jenis Makanan -->
+            <div class="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                <span class="text-xs font-semibold text-slate-600 px-2">Makanan:</span>
+                <button onclick="selectFood('apple')" id="food-apple" class="food-btn px-3 py-1.5 rounded-lg text-sm font-medium bg-white text-rose-600 shadow-sm transition flex items-center gap-1.5">
+                    <span>🍎</span> Epal
+                </button>
+                <button onclick="selectFood('burger')" id="food-burger" class="food-btn px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-white/60 transition flex items-center gap-1.5">
+                    <span>🍔</span> Burger
+                </button>
+                <button onclick="selectFood('bread')" id="food-bread" class="food-btn px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-white/60 transition flex items-center gap-1.5">
+                    <span>🍞</span> Roti
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Kandungan Utama -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Bahagian Kiri: Kanvas 3D & Kawalan (7 Lajur) -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- Bar Status Semasa -->
+            <div class="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap justify-between items-center gap-2">
+                <div class="flex items-center gap-2.5">
+                    <span class="relative flex h-3 w-3">
+                      <span id="status-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 hidden"></span>
+                      <span id="status-dot" class="relative inline-flex rounded-full h-3 w-3 bg-slate-400"></span>
+                    </span>
+                    <span class="text-sm font-semibold text-slate-700">Status: <span id="current-stage-text" class="text-blue-600">Sedia untuk bermula</span></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="resetCamera()" class="text-xs font-semibold px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition flex items-center gap-1">
+                        <i class="fa-solid fa-video"></i> Tetapkan Semula Kamera
+                    </button>
+                </div>
+            </div>
+
+            <!-- Bekas Kanvas 3D -->
+            <div id="canvas-container" class="border border-slate-700 shadow-lg">
+                <canvas id="digestion3DCanvas"></canvas>
+                
+                <!-- Petunjuk Kawalan 3D Terapung -->
+                <div class="absolute top-3 left-3 bg-slate-900/80 backdrop-blur-md px-3 py-2 rounded-xl border border-slate-700 text-xs text-slate-200 shadow-md pointer-events-none space-y-1">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-arrows-rotate text-blue-400 w-3.5"></i> <span>Seret untuk putar 360°</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-magnifying-glass text-emerald-400 w-3.5"></i> <span>Skrol untuk zum masuk/keluar</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-hand-pointer text-amber-400 w-3.5"></i> <span>Klik organ 3D untuk info</span>
+                    </div>
+                </div>
+
+                <!-- Label Nama Organ Hover 3D -->
+                <div id="hover-tooltip" class="hidden absolute pointer-events-none bg-blue-600/95 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg transform -translate-x-1/2 -translate-y-full -mt-3">
+                    Organ
+                </div>
+            </div>
+
+            <!-- Panel Kawalan Simulasi -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                
+                <!-- Butang Tindakan Utama -->
+                <div class="flex items-center gap-2 w-full sm:w-auto justify-center">
+                    <button id="btn-start" onclick="startSimulation()" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-utensils"></i>
+                        <span id="btn-start-text">Mula Mengunyah</span>
+                    </button>
+                    
+                    <button id="btn-pause" onclick="togglePause()" disabled class="bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition flex items-center justify-center gap-1.5" title="Jeda / Sambung">
+                        <i id="pause-icon" class="fa-solid fa-pause"></i>
+                    </button>
+
+                    <button id="btn-reset" onclick="resetSimulation()" class="bg-slate-200 hover:bg-slate-300 active:scale-95 text-slate-700 font-semibold px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5" title="Set Semula">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                </div>
+
+                <!-- Kawalan Kelajuan -->
+                <div class="flex items-center gap-3 w-full sm:w-auto bg-slate-50 px-4 py-2 rounded-xl border border-slate-200">
+                    <i class="fa-solid fa-gauge-high text-slate-500 text-sm"></i>
+                    <label for="speed-slider" class="text-xs font-semibold text-slate-600 whitespace-nowrap">Kelajuan:</label>
+                    <input type="range" id="speed-slider" min="0.5" max="3" step="0.5" value="1" oninput="updateSpeed(this.value)" class="w-full sm:w-24 accent-blue-600 cursor-pointer">
+                    <span id="speed-value" class="text-xs font-bold text-blue-600 w-8 text-right">1.0x</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bahagian Kanan: Maklumat Organ & Proses (5 Lajur) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- Navigasi Pantas Organ -->
+            <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Pilih Organ Untuk Info</h2>
+                <div class="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-3 gap-2">
+                    <button onclick="selectOrgan('mouth')" id="nav-mouth" class="organ-badge border border-slate-200 rounded-xl p-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        👄 Mulut
+                    </button>
+                    <button onclick="selectOrgan('esophagus')" id="nav-esophagus" class="organ-badge border border-slate-200 rounded-xl p-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        管 Esofagus
+                    </button>
+                    <button onclick="selectOrgan('stomach')" id="nav-stomach" class="organ-badge border border-slate-200 rounded-xl p-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        🫘 Perut
+                    </button>
+                    <button onclick="selectOrgan('small_intestine')" id="nav-small_intestine" class="organ-badge border border-slate-200 rounded-xl p-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        ➰ Usus Kecil
+                    </button>
+                    <button onclick="selectOrgan('large_intestine')" id="nav-large_intestine" class="organ-badge border border-slate-200 rounded-xl p-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        🧱 Usus Besar
+                    </button>
+                    <button onclick="selectOrgan('anus')" id="nav-anus" class="organ-badge border border-slate-200 rounded-xl p-2 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                        🚽 Dubur
+                    </button>
+                </div>
+            </div>
+
+            <!-- Kad Paparan Maklumat Terperinci Organ -->
+            <div id="info-card" class="bg-white rounded-2xl border border-slate-200 shadow-sm flex-grow flex flex-col overflow-hidden">
+                <div id="organ-header" class="p-5 bg-gradient-to-r from-rose-500 to-pink-600 text-white transition-colors duration-300">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <span id="organ-step" class="inline-block px-2.5 py-0.5 bg-white/20 backdrop-blur-xs rounded-full text-xs font-semibold mb-1.5">Peringkat 1</span>
+                            <h2 id="organ-title" class="text-2xl font-bold">Mulut (Rongga Mulut)</h2>
+                        </div>
+                        <div id="organ-icon-box" class="bg-white/20 p-3 rounded-xl text-2xl">
+                            👄
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-5 flex-grow overflow-y-auto space-y-4">
+                    <div class="flex flex-wrap gap-2">
+                        <span id="digestion-type-badge" class="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold">
+                            <i class="fa-solid fa-gears mr-1"></i> Pencernaan Fizikal & Kimia
+                        </span>
+                        <span id="enzyme-badge" class="px-3 py-1 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold">
+                            <i class="fa-solid fa-flask mr-1"></i> Enzim: Amilase Air Liur
+                        </span>
+                    </div>
+
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-info text-blue-500"></i> Fungsi Utama
+                        </h3>
+                        <p id="organ-function" class="text-sm text-slate-600 leading-relaxed">
+                            Tempat bermulanya proses pencernaan. Gigi mengunyah dan menghancurkan makanan kepada cebisan kecil untuk menambah luas permukaan bagi tindakan enzim.
+                        </p>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h3 class="text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+                            <i class="fa-solid fa-microscope text-emerald-600"></i> Proses Pada Makanan
+                        </h3>
+                        <ul id="organ-processes" class="text-sm text-slate-600 space-y-2 list-disc list-inside">
+                            <li><strong>Pencernaan Fizikal:</strong> Gigi memotong dan mengisar makanan.</li>
+                            <li><strong>Pencernaan Kimia:</strong> Kelenjar air liur merembeskan enzim <em>amilase</em> yang memecahkan kanji kepada maltosa.</li>
+                            <li>Lidah menggaul makanan dengan air liur membentuk bebola lembut yang dipanggil <strong>bolus</strong> sebelum ditelan.</li>
+                        </ul>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span class="text-xs font-semibold text-slate-500">Bentuk Makanan:</span>
+                        <span id="food-state" class="text-xs font-bold text-amber-700 bg-amber-50 px-3 py-1 rounded-full border border-amber-200">
+                            Cebisan Makanan ➔ Bolus
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer Ringkas -->
+    <footer class="bg-white border-t border-slate-200 py-3 text-center text-xs text-slate-500 mt-auto">
+        Simulasi Pendidikan Sains 3D • Sistem Pencernaan Manusia Interaktif
+    </footer>
+
+    <script>
+        /**
+         * DATA MAKLUMAT ORGAN PENCERNAAN
+         */
+        const ORGAN_DATA = {
+            mouth: {
+                step: "Peringkat 1",
+                title: "Mulut (Rongga Mulut)",
+                icon: "👄",
+                gradient: "from-rose-500 to-pink-600",
+                type: "Pencernaan Fizikal & Kimia",
+                enzyme: "Enzim: Amilase Air Liur",
+                func: "Tempat bermulanya sistem pencernaan. Makanan dihancurkan secara mekanikal oleh gigi dan dilembutkan oleh air liur untuk memudahkan proses menelan.",
+                processes: [
+                    "<strong>Pengunyahan:</strong> Gigi memotong dan mengisar makanan menjadi cebisan kecil (menambah luas permukaan).",
+                    "<strong>Tindakan Enzim:</strong> Kelenjar air liur merembeskan <em>amilase</em> yang mencernakan kanji kepada maltosa.",
+                    "<strong>Pembentukan Bolus:</strong> Lidah membentuk makanan menjadi bebola lembut (bolus) dan menolaknya ke tekak."
+                ],
+                foodState: "Makanan Pepejal ➔ Bolus"
+            },
+            esophagus: {
+                step: "Peringkat 2",
+                title: "Esofagus (Salur Makanan)",
+                icon: "管",
+                gradient: "from-orange-500 to-amber-600",
+                type: "Pengangkutan (Peristalsis)",
+                enzyme: "Enzim: Tiada (Mukus Sahaja)",
+                func: "Saluran berotot sepanjang kira-kira 25 cm yang menghubungkan tekak (farinks) ke perut. Tiada pencernaan kimia berlaku di sini.",
+                processes: [
+                    "<strong>Peristalsis:</strong> Dinding otot esofagus mengecut dan mengendur secara berirama seperti gelombang.",
+                    "Gelombang peristalsis ini menolak <strong>bolus</strong> makanan ke bawah menuju ke perut walaupun dalam keadaan berbaring.",
+                    "Dinding esofagus merembeskan mukus untuk melincirkan laluan makanan."
+                ],
+                foodState: "Bolus (Bergerak ke bawah)"
+            },
+            stomach: {
+                step: "Peringkat 3",
+                title: "Perut",
+                icon: "🫘",
+                gradient: "from-amber-500 to-yellow-600",
+                type: "Pencernaan Fizikal & Kimia",
+                enzyme: "Enzim: Protease (Pepsin) & Asid Hidroklorik",
+                func: "Organ berotot berbentuk huruf 'J' yang menggaul makanan dengan jus gaster berasid tinggi.",
+                processes: [
+                    "<strong>Pengadunan Fizikal:</strong> Dinding otot perut mengecut untuk menggaul makanan dengan jus gaster.",
+                    "<strong>Asid Hidroklorik (HCl):</strong> Membunuh bakteria dalam makanan dan menyediakan medium berasid (pH 2) untuk enzim.",
+                    "<strong>Pencernaan Protein:</strong> Enzim <em>protease (pepsin)</em> mencernakan protein kepada polipeptida."
+                ],
+                foodState: "Bolus ➔ Kim (Separa Cecair)"
+            },
+            small_intestine: {
+                step: "Peringkat 4",
+                title: "Usus Kecil (Duodenum & Ileum)",
+                icon: "➰",
+                gradient: "from-emerald-500 to-teal-600",
+                type: "Pencernaan Lengkap & Penyerapan",
+                enzyme: "Enzim: Amilase, Protease, Lipase & Hempedu",
+                func: "Tapak utama pencernaan lengkap semua kelas makanan dan penyerapan nutrien ke dalam aliran darah melalui vilus.",
+                processes: [
+                    "<strong>Pengemulsian Lemak:</strong> Hempedu (dari hati) memecahkan lemak menjadi titisan kecil.",
+                    "<strong>Pencernaan Lengkap:</strong> Karbohidrat menjadi glukosa, protein menjadi asid amino, dan lemak menjadi asid lemak & gliserol.",
+                    "<strong>Penyerapan Nutrien:</strong> Dinding dalam berlipat-lipat (<em>vilus</em>) menyerap nutrien tercerna ke dalam kapilari darah."
+                ],
+                foodState: "Kim ➔ Nutrien Diserap"
+            },
+            large_intestine: {
+                step: "Peringkat 5",
+                title: "Usus Besar (Kolon)",
+                icon: "🧱",
+                gradient: "from-indigo-500 to-blue-600",
+                type: "Penyerapan Semula Air & Garam Mineral",
+                enzyme: "Enzim: Tiada (Bakteria Simbiotik)",
+                func: "Menerima sisa makanan yang tidak tercerna (seperti serat/selulosa) dan menyerap semula air serta vitamin.",
+                processes: [
+                    "<strong>Penyerapan Air:</strong> Sebahagian besar air dan garam mineral diserap semula ke dalam aliran darah.",
+                    "<strong>Pembentukan Tinja:</strong> Sisa makanan yang kehilangan air menjadi semakin pejal dan membentuk tinja.",
+                    "Bakteria baik membantu menghasilkan vitamin K dan vitamin B."
+                ],
+                foodState: "Sisa Cecair ➔ Tinja Pepejal"
+            },
+            anus: {
+                step: "Peringkat 6",
+                title: "Rektum & Dubur",
+                icon: "🚽",
+                gradient: "from-slate-600 to-slate-800",
+                type: "Penyahtinjaan",
+                enzyme: "Enzim: Tiada",
+                func: "Rektum menyimpan tinja sementara sebelum disingkirkan keluar dari badan melalui dubur.",
+                processes: [
+                    "<strong>Penyimpanan:</strong> Tinja terkumpul di dalam rektum sehingga penuh.",
+                    "<strong>Penyahtinjaan:</strong> Apabila rektum penuh, otot dinding rektum mengecut dan otot sfinkter dubur mengendur.",
+                    "Tinja disingkirkan keluar dari tubuh manusia."
+                ],
+                foodState: "Tinja (Disingkirkan)"
+            }
+        };
+
+        /**
+         * PEMBOLEHUBAH KEADAAN SIMULASI
+         */
+        let isRunning = false;
+        let isPaused = false;
+        let speedMultiplier = 1.0;
+        let selectedFood = 'apple';
+        let activeOrgan = 'mouth';
+        let hoveredOrgan = null;
+
+        let progress = 0;
+        let chewTimer = 0;
+        let isChewing = false;
+        let frameCount = 0;
+
+        /**
+         * PEMBOLEHUBAH ENJIN THREE.JS (3D)
+         */
+        let scene, camera, renderer, raycaster, mouse;
+        let organMeshes = {}; // Simpan rujukan mesh 3D untuk setiap organ
+        let interactiveMeshes = []; // Senarai mesh yang boleh diklik
+        let lowerJawGroup, stomachMesh, foodGroup, nutrientParticles;
+        let digestionCurve; // Laluan 3D spline untuk perjalanan makanan
+
+        // Kawalan Kamera Orbit Manual (Putaran & Zum)
+        let isDragging = false;
+        let dragMoved = false;
+        let prevMouse = { x: 0, y: 0 };
+        let spherical = { radius: 22, theta: 0.35, phi: Math.PI / 2.1 }; // Sudut awal 3D yang menarik
+
+        // Segmen laluan mengikut julat t (0.0 - 1.0)
+        const PATH_SEGMENTS = [
+            { maxT: 0.12, organ: 'mouth' },
+            { maxT: 0.28, organ: 'esophagus' },
+            { maxT: 0.44, organ: 'stomach' },
+            { maxT: 0.72, organ: 'small_intestine' },
+            { maxT: 0.92, organ: 'large_intestine' },
+            { maxT: 1.00, organ: 'anus' }
+        ];
+
+        /**
+         * INISIALISASI SCENE 3D THREE.JS
+         */
+        function init3D() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('digestion3DCanvas');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            // 1. Scene & Pencahayaan
+            scene = new THREE.Scene();
+            
+            camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+            updateCameraPosition();
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Cahaya persekitaran & cahaya berarah untuk kedalaman 3D
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+            dirLight.position.set(10, 15, 12);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            const backLight = new THREE.DirectionalLight(0x93c5fd, 0.4);
+            backLight.position.set(-10, -5, -10);
+            scene.add(backLight);
+
+            // 2. Raycaster untuk interaksi klik & hover 3D
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            // 3. Bina Model 3D Badan & Organ
+            buildHumanSilhouette3D();
+            buildOrgans3D();
+            buildFood3D();
+
+            // 4. Sediakan Kawalan Tetikus & Sentuhan
+            setup3DControls(canvas);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        /**
+         * MEMBINA SILUET BADAN MANUSIA LUTSINAR (3D)
+         */
+        function buildHumanSilhouette3D() {
+            const bodyGroup = new THREE.Group();
+            const bodyMat = new THREE.MeshPhysicalMaterial({
+                color: 0x94a3b8,
+                transparent: true,
+                opacity: 0.16,
+                roughness: 0.3,
+                metalness: 0.1,
+                depthWrite: false,
+                side: THREE.DoubleSide
+            });
+
+            // Kepala (Sfera sedikit bujur)
+            const headGeo = new THREE.SphereGeometry(2.1, 32, 32);
+            headGeo.scale(0.95, 1.15, 1.05);
+            const headMesh = new THREE.Mesh(headGeo, bodyMat);
+            headMesh.position.set(0, 7.2, 0.3);
+            bodyGroup.add(headMesh);
+
+            // Leher
+            const neckGeo = new THREE.CylinderGeometry(1.0, 1.2, 1.8, 24);
+            const neckMesh = new THREE.Mesh(neckGeo, bodyMat);
+            neckMesh.position.set(0, 4.9, 0);
+            bodyGroup.add(neckMesh);
+
+            // Badan / Torso
+            const torsoGeo = new THREE.CylinderGeometry(3.4, 2.7, 9.5, 32);
+            torsoGeo.scale(1.15, 1.0, 0.68);
+            const torsoMesh = new THREE.Mesh(torsoGeo, bodyMat);
+            torsoMesh.position.set(0, -0.3, 0);
+            bodyGroup.add(torsoMesh);
+
+            // Bahu bulat
+            const shoulderGeo = new THREE.SphereGeometry(3.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
+            shoulderGeo.scale(1.15, 0.45, 0.68);
+            const shoulderMesh = new THREE.Mesh(shoulderGeo, bodyMat);
+            shoulderMesh.position.set(0, 4.4, 0);
+            bodyGroup.add(shoulderMesh);
+
+            scene.add(bodyGroup);
+        }
+
+        /**
+         * MEMBINA SEMUA ORGAN PENCERNAAN DALAM 3D
+         */
+        function buildOrgans3D() {
+            // Fungsi pembantu untuk mencipta bahan organ
+            const createOrganMat = (hexColor, opacity = 0.88) => {
+                return new THREE.MeshStandardMaterial({
+                    color: hexColor,
+                    roughness: 0.35,
+                    metalness: 0.05,
+                    transparent: true,
+                    opacity: opacity
+                });
+            };
+
+            // --- 1. MULUT (Rahang Atas, Rahang Bawah & Gigi) ---
+            const mouthGroup = new THREE.Group();
+            mouthGroup.userData = { organId: 'mouth', label: 'Mulut' };
+            const mouthMat = createOrganMat(0xf43f5e, 0.9);
+
+            // Rahang Atas
+            const upperJawGeo = new THREE.TorusGeometry(0.95, 0.35, 16, 24, Math.PI);
+            const upperJaw = new THREE.Mesh(upperJawGeo, mouthMat);
+            upperJaw.rotation.x = Math.PI / 2;
+            upperJaw.position.set(0, 6.6, 1.3);
+            upperJaw.userData = { organId: 'mouth', label: 'Mulut' };
+            mouthGroup.add(upperJaw);
+
+            // Gigi Atas
+            const teethMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+            const upperTeeth = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.12, 8, 20, Math.PI), teethMat);
+            upperTeeth.rotation.x = Math.PI / 2;
+            upperTeeth.position.set(0, 6.45, 1.3);
+            upperTeeth.userData = { organId: 'mouth', label: 'Mulut' };
+            mouthGroup.add(upperTeeth);
+
+            // Rahang Bawah (Boleh bergerak mengunyah)
+            lowerJawGroup = new THREE.Group();
+            lowerJawGroup.position.set(0, 6.1, 0.5); // Titik engsel rahang
+            
+            const lowerJaw = new THREE.Mesh(upperJawGeo, mouthMat);
+            lowerJaw.rotation.x = Math.PI / 2;
+            lowerJaw.position.set(0, 0, 0.8);
+            lowerJaw.userData = { organId: 'mouth', label: 'Mulut' };
+            lowerJawGroup.add(lowerJaw);
+
+            const lowerTeeth = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.12, 8, 20, Math.PI), teethMat);
+            lowerTeeth.rotation.x = Math.PI / 2;
+            lowerTeeth.position.set(0, 0.15, 0.8);
+            lowerTeeth.userData = { organId: 'mouth', label: 'Mulut' };
+            lowerJawGroup.add(lowerTeeth);
+
+            mouthGroup.add(lowerJawGroup);
+            scene.add(mouthGroup);
+            organMeshes['mouth'] = [upperJaw, lowerJaw];
+            interactiveMeshes.push(upperJaw, upperTeeth, lowerJaw, lowerTeeth);
+
+            // --- 2. ESOFAGUS (Tiub melengkung dari tekak ke perut) ---
+            const esoCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, 6.3, 0.4),
+                new THREE.Vector3(0, 5.2, -0.2),
+                new THREE.Vector3(0.1, 3.5, -0.3),
+                new THREE.Vector3(0.4, 2.1, -0.1)
+            ]);
+            const esoGeo = new THREE.TubeGeometry(esoCurve, 32, 0.35, 16, false);
+            const esoMat = createOrganMat(0xf97316, 0.82);
+            const esoMesh = new THREE.Mesh(esoGeo, esoMat);
+            esoMesh.userData = { organId: 'esophagus', label: 'Esofagus' };
+            scene.add(esoMesh);
+            organMeshes['esophagus'] = [esoMesh];
+            interactiveMeshes.push(esoMesh);
+
+            // --- 3. HATI (Organ Aksesori di sebelah kanan badan / kiri paparan) ---
+            const liverGeo = new THREE.SphereGeometry(1.4, 24, 24);
+            liverGeo.scale(1.3, 0.75, 0.8);
+            const liverMat = new THREE.MeshStandardMaterial({
+                color: 0x991b1b,
+                transparent: true,
+                opacity: 0.32,
+                roughness: 0.4
+            });
+            const liverMesh = new THREE.Mesh(liverGeo, liverMat);
+            liverMesh.position.set(-1.1, 1.7, 0.4);
+            liverMesh.rotation.z = -0.25;
+            scene.add(liverMesh);
+
+            // --- 4. PERUT (Kantung 3D berbentuk J) ---
+            const stomachCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.4, 2.1, -0.1),
+                new THREE.Vector3(1.2, 1.5, 0.2),
+                new THREE.Vector3(1.1, 0.4, 0.3),
+                new THREE.Vector3(0.1, 0.1, 0.1)
+            ]);
+            // Tiub bervariasi ketebalan menggunakan TubeGeometry dengan skala
+            const stomachGeo = new THREE.TubeGeometry(stomachCurve, 36, 0.85, 20, false);
+            // Ubah suai verteks hujung perut supaya mengecil di bahagian pilorus
+            const posAttr = stomachGeo.attributes.position;
+            for (let i = 0; i < posAttr.count; i++) {
+                const vx = posAttr.getX(i);
+                const vy = posAttr.getY(i);
+                if (vy < 0.6 && vx < 0.7) {
+                    posAttr.setY(i, vy * 0.75 + 0.1);
+                }
+            }
+            stomachGeo.computeVertexNormals();
+
+            const stomachMat = createOrganMat(0xf59e0b, 0.82);
+            stomachMesh = new THREE.Mesh(stomachGeo, stomachMat);
+            stomachMesh.userData = { organId: 'stomach', label: 'Perut' };
+            scene.add(stomachMesh);
+            organMeshes['stomach'] = [stomachMesh];
+            interactiveMeshes.push(stomachMesh);
+
+            // --- 5. USUS KECIL (Lingkaran 3D di bahagian tengah abdomen) ---
+            const smallIntestinePoints = [
+                new THREE.Vector3(0.1, 0.1, 0.1),
+                new THREE.Vector3(-0.7, -0.3, 0.3),
+                new THREE.Vector3(0.8, -0.7, 0.4),
+                new THREE.Vector3(-0.9, -1.1, 0.2),
+                new THREE.Vector3(0.9, -1.5, 0.35),
+                new THREE.Vector3(-0.8, -1.9, 0.25),
+                new THREE.Vector3(0.7, -2.3, 0.3),
+                new THREE.Vector3(-0.5, -2.6, 0.15),
+                new THREE.Vector3(-1.4, -2.7, 0.0) // Sambung ke sekum (usus besar)
+            ];
+            const smallCurve = new THREE.CatmullRomCurve3(smallIntestinePoints);
+            const smallGeo = new THREE.TubeGeometry(smallCurve, 120, 0.34, 14, false);
+            const smallMat = createOrganMat(0x14b8a6, 0.82);
+            const smallMesh = new THREE.Mesh(smallGeo, smallMat);
+            smallMesh.userData = { organId: 'small_intestine', label: 'Usus Kecil' };
+            scene.add(smallMesh);
+            organMeshes['small_intestine'] = [smallMesh];
+            interactiveMeshes.push(smallMesh);
+
+            // --- 6. USUS BESAR (Bingkai kolon mengelilingi usus kecil) ---
+            const largeIntestinePoints = [
+                new THREE.Vector3(-1.4, -2.7, 0.0),  // Sekum (Kanan bawah pesakit / kiri skrin)
+                new THREE.Vector3(-1.6, -1.5, -0.1), // Kolon Menaik
+                new THREE.Vector3(-1.5, -0.1, 0.1),  // Fleksur hepatik
+                new THREE.Vector3(0.0, 0.1, 0.45),   // Kolon Melintang (di hadapan)
+                new THREE.Vector3(1.5, -0.2, 0.1),   // Fleksur splenik
+                new THREE.Vector3(1.6, -1.6, -0.1),  // Kolon Menurun
+                new THREE.Vector3(1.3, -2.9, -0.2),  // Kolon Sigmoid
+                new THREE.Vector3(0.2, -3.3, -0.3)   // Masuk ke rektum
+            ];
+            const largeCurve = new THREE.CatmullRomCurve3(largeIntestinePoints);
+            const largeGeo = new THREE.TubeGeometry(largeCurve, 80, 0.56, 16, false);
+            const largeMat = createOrganMat(0x6366f1, 0.78);
+            const largeMesh = new THREE.Mesh(largeGeo, largeMat);
+            largeMesh.userData = { organId: 'large_intestine', label: 'Usus Besar' };
+            scene.add(largeMesh);
+            organMeshes['large_intestine'] = [largeMesh];
+            interactiveMeshes.push(largeMesh);
+
+            // --- 7. REKTUM & DUBUR ---
+            const anusCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.2, -3.3, -0.3),
+                new THREE.Vector3(0.0, -4.1, -0.35),
+                new THREE.Vector3(0.0, -4.9, -0.35)
+            ]);
+            const anusGeo = new THREE.TubeGeometry(anusCurve, 24, 0.4, 14, false);
+            const anusMat = createOrganMat(0x64748b, 0.85);
+            const anusMesh = new THREE.Mesh(anusGeo, anusMat);
+            anusMesh.userData = { organId: 'anus', label: 'Rektum & Dubur' };
+            scene.add(anusMesh);
+            organMeshes['anus'] = [anusMesh];
+            interactiveMeshes.push(anusMesh);
+
+            // --- LALUAN INDUK 3D UNTUK MAKANAN ---
+            const allWaypoints = [
+                new THREE.Vector3(0, 6.35, 1.5),    // Mulut depan
+                new THREE.Vector3(0, 6.3, 0.4),     // Tekak
+                new THREE.Vector3(0, 5.2, -0.2),    // Esofagus
+                new THREE.Vector3(0.1, 3.5, -0.3),
+                new THREE.Vector3(0.4, 2.1, -0.1),  // Perut masuk
+                new THREE.Vector3(1.2, 1.5, 0.2),
+                new THREE.Vector3(1.1, 0.4, 0.3),
+                new THREE.Vector3(0.1, 0.1, 0.1),   // Duodenum / Usus kecil
+                new THREE.Vector3(-0.7, -0.3, 0.3),
+                new THREE.Vector3(0.8, -0.7, 0.4),
+                new THREE.Vector3(-0.9, -1.1, 0.2),
+                new THREE.Vector3(0.9, -1.5, 0.35),
+                new THREE.Vector3(-0.8, -1.9, 0.25),
+                new THREE.Vector3(0.7, -2.3, 0.3),
+                new THREE.Vector3(-0.5, -2.6, 0.15),
+                new THREE.Vector3(-1.4, -2.7, 0.0), // Usus besar
+                new THREE.Vector3(-1.6, -1.5, -0.1),
+                new THREE.Vector3(-1.5, -0.1, 0.1),
+                new THREE.Vector3(0.0, 0.1, 0.45),
+                new THREE.Vector3(1.5, -0.2, 0.1),
+                new THREE.Vector3(1.6, -1.6, -0.1),
+                new THREE.Vector3(1.3, -2.9, -0.2),
+                new THREE.Vector3(0.2, -3.3, -0.3), // Rektum
+                new THREE.Vector3(0.0, -4.1, -0.35),
+                new THREE.Vector3(0.0, -5.1, -0.35) // Dubur keluar
+            ];
+            digestionCurve = new THREE.CatmullRomCurve3(allWaypoints);
+        }
+
+        /**
+         * MEMBINA MODEL 3D MAKANAN & PARTIKEL NUTRIEN
+         */
+        function buildFood3D() {
+            foodGroup = new THREE.Group();
+            
+            // Bebola utama makanan (Bolus / Kim / Tinja)
+            const foodGeo = new THREE.SphereGeometry(0.32, 20, 20);
+            const foodMat = new THREE.MeshStandardMaterial({
+                color: 0xef4444,
+                roughness: 0.3,
+                emissive: 0xef4444,
+                emissiveIntensity: 0.25
+            });
+            const mainSphere = new THREE.Mesh(foodGeo, foodMat);
+            mainSphere.name = "mainFood";
+            foodGroup.add(mainSphere);
+
+            // Cebisan tambahan semasa mengunyah
+            for (let i = 0; i < 3; i++) {
+                const crumb = new THREE.Mesh(
+                    new THREE.SphereGeometry(0.16, 12, 12),
+                    foodMat.clone()
+                );
+                crumb.name = "crumb_" + i;
+                crumb.visible = false;
+                foodGroup.add(crumb);
+            }
+
+            // Partikel penyerapan nutrien (hijau bercahaya di usus kecil)
+            nutrientParticles = new THREE.Group();
+            const partGeo = new THREE.SphereGeometry(0.08, 8, 8);
+            const partMat = new THREE.MeshBasicMaterial({ color: 0x34d399 });
+            for (let i = 0; i < 6; i++) {
+                const p = new THREE.Mesh(partGeo, partMat);
+                nutrientParticles.add(p);
+            }
+            nutrientParticles.visible = false;
+            foodGroup.add(nutrientParticles);
+
+            // Letakkan makanan di hadapan mulut pada permulaan
+            foodGroup.position.set(0, 6.35, 2.3);
+            scene.add(foodGroup);
+        }
+
+        /**
+         * KAWALAN KAMERA ORBIT 3D & KLIK RAYCASTING
+         */
+        function updateCameraPosition() {
+            const x = spherical.radius * Math.sin(spherical.phi) * Math.sin(spherical.theta);
+            const y = spherical.radius * Math.cos(spherical.phi) + 0.8; // Fokus tengah badan
+            const z = spherical.radius * Math.sin(spherical.phi) * Math.cos(spherical.theta);
+            
+            camera.position.set(x, y, z);
+            camera.lookAt(0, 0.8, 0);
+        }
+
+        function resetCamera() {
+            spherical = { radius: 22, theta: 0.35, phi: Math.PI / 2.1 };
+            updateCameraPosition();
+        }
+
+        function setup3DControls(canvas) {
+            // Tetikus Mula Seret
+            canvas.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                dragMoved = false;
+                prevMouse = { x: e.clientX, y: e.clientY };
+            });
+
+            // Tetikus Bergerak (Putaran Kamera & Raycast Hover)
+            window.addEventListener('mousemove', (e) => {
+                if (isDragging) {
+                    const deltaX = e.clientX - prevMouse.x;
+                    const deltaY = e.clientY - prevMouse.y;
+                    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) dragMoved = true;
+
+                    spherical.theta -= deltaX * 0.008;
+                    spherical.phi -= deltaY * 0.008;
+                    spherical.phi = Math.max(0.25, Math.min(Math.PI - 0.25, spherical.phi));
+
+                    updateCameraPosition();
+                    prevMouse = { x: e.clientX, y: e.clientY };
+                } else {
+                    handleHover3D(e);
+                }
+            });
+
+            // Tetikus Lepas (Jika tidak seret, anggap sebagai klik)
+            canvas.addEventListener('mouseup', (e) => {
+                isDragging = false;
+                if (!dragMoved) {
+                    handleClick3D(e);
+                }
+            });
+
+            // Skrol Roda Tetikus untuk Zum
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                spherical.radius += e.deltaY * 0.015;
+                spherical.radius = Math.max(9, Math.min(35, spherical.radius));
+                updateCameraPosition();
+            }, { passive: false });
+
+            // Sokongan Skrin Sentuh (Mobile/Tablet)
+            let initialPinchDist = null;
+            canvas.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    isDragging = true;
+                    dragMoved = false;
+                    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                } else if (e.touches.length === 2) {
+                    initialPinchDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                }
+            }, { passive: true });
+
+            canvas.addEventListener('touchmove', (e) => {
+                if (e.touches.length === 1 && isDragging) {
+                    const deltaX = e.touches[0].clientX - prevMouse.x;
+                    const deltaY = e.touches[0].clientY - prevMouse.y;
+                    if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) dragMoved = true;
+
+                    spherical.theta -= deltaX * 0.01;
+                    spherical.phi -= deltaY * 0.01;
+                    spherical.phi = Math.max(0.25, Math.min(Math.PI - 0.25, spherical.phi));
+
+                    updateCameraPosition();
+                    prevMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                } else if (e.touches.length === 2 && initialPinchDist) {
+                    const dist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
+                    );
+                    const delta = initialPinchDist - dist;
+                    spherical.radius += delta * 0.04;
+                    spherical.radius = Math.max(9, Math.min(35, spherical.radius));
+                    updateCameraPosition();
+                    initialPinchDist = dist;
+                }
+            }, { passive: true });
+
+            canvas.addEventListener('touchend', (e) => {
+                if (e.touches.length === 0) {
+                    isDragging = false;
+                    initialPinchDist = null;
+                    if (!dragMoved && e.changedTouches.length > 0) {
+                        handleClick3D(e.changedTouches[0]);
+                    }
+                }
+            });
+        }
+
+        function getIntersectedOrgan(clientX, clientY) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveMeshes, false);
+            if (intersects.length > 0) {
+                return intersects[0].object.userData;
+            }
+            return null;
+        }
+
+        function handleHover3D(e) {
+            const hit = getIntersectedOrgan(e.clientX, e.clientY);
+            const tooltip = document.getElementById('hover-tooltip');
+            const rect = renderer.domElement.getBoundingClientRect();
+
+            if (hit) {
+                hoveredOrgan = hit.organId;
+                renderer.domElement.style.cursor = 'pointer';
+                tooltip.textContent = hit.label;
+                tooltip.style.left = (e.clientX - rect.left) + 'px';
+                tooltip.style.top = (e.clientY - rect.top) + 'px';
+                tooltip.classList.remove('hidden');
+            } else {
+                hoveredOrgan = null;
+                if (!isDragging) renderer.domElement.style.cursor = 'grab';
+                tooltip.classList.add('hidden');
+            }
+            highlightActiveOrgan3D();
+        }
+
+        function handleClick3D(e) {
+            const hit = getIntersectedOrgan(e.clientX, e.clientY);
+            if (hit && hit.organId) {
+                selectOrgan(hit.organId);
+            }
+        }
+
+        /**
+         * MENYERLAHKAN ORGAN AKTIF DALAM 3D
+         */
+        function highlightActiveOrgan3D() {
+            Object.keys(organMeshes).forEach(id => {
+                const isSelected = (id === activeOrgan || id === hoveredOrgan);
+                organMeshes[id].forEach(mesh => {
+                    if (mesh.material) {
+                        mesh.material.emissive.setHex(isSelected ? 0x3b82f6 : 0x000000);
+                        mesh.material.emissiveIntensity = isSelected ? 0.35 : 0;
+                        mesh.material.opacity = isSelected ? 0.96 : 0.78;
+                    }
+                });
+            });
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+
+        /**
+         * KAWALAN UI & LOGIK SIMULASI
+         */
+        function selectFood(type) {
+            selectedFood = type;
+            document.querySelectorAll('.food-btn').forEach(btn => {
+                btn.classList.remove('bg-white', 'text-rose-600', 'shadow-sm');
+                btn.classList.add('text-slate-600');
+            });
+            const activeBtn = document.getElementById(`food-${type}`);
+            activeBtn.classList.add('bg-white', 'text-rose-600', 'shadow-sm');
+            activeBtn.classList.remove('text-slate-600');
+
+            updateFoodAppearance();
+        }
+
+        function updateFoodAppearance() {
+            if (!foodGroup) return;
+            const mainSphere = foodGroup.getObjectByName("mainFood");
+            
+            // Warna makanan asal sebelum ditelan
+            let baseColor = 0xef4444; // Epal (Merah)
+            if (selectedFood === 'burger') baseColor = 0xd97706; // Burger (Coklat keemasan)
+            if (selectedFood === 'bread') baseColor = 0xfcd34d; // Roti (Kuning krim)
+
+            if (progress === 0) {
+                mainSphere.material.color.setHex(baseColor);
+                mainSphere.material.emissive.setHex(baseColor);
+                mainSphere.scale.set(1.2, 1.2, 1.2);
+            }
+        }
+
+        function updateSpeed(val) {
+            speedMultiplier = parseFloat(val);
+            document.getElementById('speed-value').textContent = speedMultiplier.toFixed(1) + 'x';
+        }
+
+        function selectOrgan(organId, autoFromAnim = false) {
+            if (activeOrgan === organId && autoFromAnim) return;
+            activeOrgan = organId;
+
+            document.querySelectorAll('.organ-badge').forEach(b => b.classList.remove('active'));
+            const navBtn = document.getElementById(`nav-${organId}`);
+            if (navBtn) navBtn.classList.add('active');
+
+            const data = ORGAN_DATA[organId];
+            if (!data) return;
+
+            document.getElementById('organ-step').textContent = data.step;
+            document.getElementById('organ-title').textContent = data.title;
+            document.getElementById('organ-icon-box').textContent = data.icon;
+            
+            const header = document.getElementById('organ-header');
+            header.className = `p-5 bg-gradient-to-r ${data.gradient} text-white transition-colors duration-300`;
+
+            document.getElementById('digestion-type-badge').innerHTML = `<i class="fa-solid fa-gears mr-1"></i> ${data.type}`;
+            document.getElementById('enzyme-badge').innerHTML = `<i class="fa-solid fa-flask mr-1"></i> ${data.enzyme}`;
+            document.getElementById('organ-function').textContent = data.func;
+            document.getElementById('food-state').textContent = data.foodState;
+
+            const processList = document.getElementById('organ-processes');
+            processList.innerHTML = data.processes.map(p => `<li>${p}</li>`).join('');
+
+            highlightActiveOrgan3D();
+        }
+
+        function startSimulation() {
+            if (progress >= 1.0) {
+                progress = 0;
+            }
+            isRunning = true;
+            isPaused = false;
+            isChewing = (progress === 0);
+            chewTimer = 0;
+
+            document.getElementById('btn-start').disabled = true;
+            document.getElementById('btn-start').classList.add('opacity-50', 'cursor-not-allowed');
+            document.getElementById('btn-pause').disabled = false;
+            document.getElementById('pause-icon').className = 'fa-solid fa-pause';
+            
+            document.getElementById('status-ping').classList.remove('hidden');
+            document.getElementById('status-dot').className = 'relative inline-flex rounded-full h-3 w-3 bg-emerald-500';
+            
+            selectOrgan('mouth');
+        }
+
+        function togglePause() {
+            if (!isRunning) return;
+            isPaused = !isPaused;
+            const icon = document.getElementById('pause-icon');
+            const statusDot = document.getElementById('status-dot');
+            const statusPing = document.getElementById('status-ping');
+
+            if (isPaused) {
+                icon.className = 'fa-solid fa-play';
+                statusDot.className = 'relative inline-flex rounded-full h-3 w-3 bg-amber-500';
+                statusPing.classList.add('hidden');
+                document.getElementById('current-stage-text').textContent = "Dijeda (Paused)";
+            } else {
+                icon.className = 'fa-solid fa-pause';
+                statusDot.className = 'relative inline-flex rounded-full h-3 w-3 bg-emerald-500';
+                statusPing.classList.remove('hidden');
+            }
+        }
+
+        function resetSimulation() {
+            isRunning = false;
+            isPaused = false;
+            isChewing = false;
+            progress = 0;
+            chewTimer = 0;
+
+            const startBtn = document.getElementById('btn-start');
+            startBtn.disabled = false;
+            startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('btn-start-text').textContent = "Mula Mengunyah";
+            document.getElementById('btn-pause').disabled = true;
+            document.getElementById('pause-icon').className = 'fa-solid fa-pause';
+
+            document.getElementById('status-ping').classList.add('hidden');
+            document.getElementById('status-dot').className = 'relative inline-flex rounded-full h-3 w-3 bg-slate-400';
+            document.getElementById('current-stage-text').textContent = "Sedia untuk bermula";
+
+            // Tetapkan semula kedudukan rahang & makanan
+            if (lowerJawGroup) lowerJawGroup.rotation.x = 0;
+            if (foodGroup) {
+                foodGroup.position.set(0, 6.35, 2.3);
+                nutrientParticles.visible = false;
+                for (let i = 0; i < 3; i++) {
+                    foodGroup.getObjectByName("crumb_" + i).visible = false;
+                }
+            }
+            updateFoodAppearance();
+            selectOrgan('mouth');
+        }
+
+        function getOrganByProgress(t) {
+            for (let seg of PATH_SEGMENTS) {
+                if (t <= seg.maxT) return seg.organ;
+            }
+            return 'anus';
+        }
+
+        /**
+         * GELUNG ANIMASI 3D UTAMA
+         */
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+
+            if (isRunning && !isPaused) {
+                frameCount++;
+                const mainSphere = foodGroup.getObjectByName("mainFood");
+
+                if (isChewing) {
+                    // Fasa 1: Mengunyah di mulut
+                    chewTimer += 1 * speedMultiplier;
+                    document.getElementById('current-stage-text').textContent = "Sedang mengunyah makanan di mulut...";
+
+                    // Gerakkan makanan masuk ke dalam mulut
+                    foodGroup.position.set(0, 6.32, 1.35);
+
+                    // Animasi rahang bawah buka dan tutup
+                    const jawAngle = Math.abs(Math.sin(frameCount * 0.25)) * 0.35;
+                    lowerJawGroup.rotation.x = jawAngle;
+
+                    // Pecahkan makanan kepada cebisan kecil
+                    mainSphere.scale.set(0.7, 0.7, 0.7);
+                    for (let i = 0; i < 3; i++) {
+                        const crumb = foodGroup.getObjectByName("crumb_" + i);
+                        crumb.visible = true;
+                        crumb.material.color.copy(mainSphere.material.color);
+                        const angle = (frameCount * 0.2) + (i * 2.1);
+                        crumb.position.set(Math.cos(angle) * 0.28, Math.sin(angle) * 0.15, Math.sin(angle) * 0.25);
+                    }
+
+                    if (chewTimer >= 90) {
+                        isChewing = false;
+                        lowerJawGroup.rotation.x = 0;
+                        for (let i = 0; i < 3; i++) {
+                            foodGroup.getObjectByName("crumb_" + i).visible = false;
+                        }
+                    }
+                } else {
+                    // Fasa 2: Perjalanan sepanjang salur pencernaan 3D
+                    const currentOrgan = getOrganByProgress(progress);
+                    let localSpeed = 0.0017;
+                    if (currentOrgan === 'stomach' || currentOrgan === 'small_intestine') {
+                        localSpeed = 0.0012;
+                    }
+
+                    progress += localSpeed * speedMultiplier;
+
+                    if (progress >= 1.0) {
+                        progress = 1.0;
+                        isRunning = false;
+                        nutrientParticles.visible = false;
+                        document.getElementById('status-ping').classList.add('hidden');
+                        document.getElementById('status-dot').className = 'relative inline-flex rounded-full h-3 w-3 bg-blue-600';
+                        document.getElementById('current-stage-text').textContent = "Selesai! Tinja disingkirkan.";
+                        
+                        const startBtn = document.getElementById('btn-start');
+                        startBtn.disabled = false;
+                        startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+                        document.getElementById('btn-start-text').textContent = "Ulang Semula";
+                        document.getElementById('btn-pause').disabled = true;
+                        selectOrgan('anus', true);
+                    } else {
+                        // Dapatkan koordinat tepat di atas lengkung spline 3D
+                        const pt = digestionCurve.getPointAt(progress);
+                        foodGroup.position.copy(pt);
+
+                        const updatedOrgan = getOrganByProgress(progress);
+                        selectOrgan(updatedOrgan, true);
+
+                        // Ubah bentuk, saiz & warna makanan mengikut organ
+                        if (updatedOrgan === 'esophagus') {
+                            mainSphere.material.color.setHex(0xf59e0b); // Bolus
+                            mainSphere.material.emissive.setHex(0xd97706);
+                            mainSphere.scale.set(0.85, 1.1, 0.85);
+                            nutrientParticles.visible = false;
+                        } else if (updatedOrgan === 'stomach') {
+                            mainSphere.material.color.setHex(0xeab308); // Kim
+                            mainSphere.material.emissive.setHex(0xca8a04);
+                            mainSphere.scale.set(0.95, 0.85, 0.95);
+                            // Perut berdenyut mengadun makanan
+                            stomachMesh.scale.setScalar(1 + Math.sin(frameCount * 0.15) * 0.04);
+                        } else if (updatedOrgan === 'small_intestine') {
+                            stomachMesh.scale.setScalar(1);
+                            mainSphere.material.color.setHex(0xd97706);
+                            mainSphere.scale.set(0.68, 0.68, 0.68); // Mengecil kerana nutrien diserap
+                            
+                            // Animasi partikel nutrien hijau keluar ke dinding usus
+                            nutrientParticles.visible = true;
+                            nutrientParticles.children.forEach((p, idx) => {
+                                const pCycle = ((frameCount * 0.04) + idx * 0.16) % 1;
+                                const angle = idx * (Math.PI / 3);
+                                p.position.set(
+                                    Math.cos(angle) * (0.2 + pCycle * 0.6),
+                                    Math.sin(angle) * (0.2 + pCycle * 0.6),
+                                    Math.sin(angle * 2) * 0.3
+                                );
+                                p.scale.setScalar(1 - pCycle * 0.7);
+                            });
+                        } else if (updatedOrgan === 'large_intestine' || updatedOrgan === 'anus') {
+                            nutrientParticles.visible = false;
+                            mainSphere.material.color.setHex(0x78350f); // Tinja coklat pekat
+                            mainSphere.material.emissive.setHex(0x451a03);
+                            mainSphere.scale.set(0.9, 0.9, 0.9);
+                        }
+
+                        const stageNames = {
+                            mouth: "Menelan bolus ke tekak...",
+                            esophagus: "Peristalsis di esofagus...",
+                            stomach: "Pencernaan & pengadunan di perut...",
+                            small_intestine: "Pencernaan lengkap & penyerapan di usus kecil...",
+                            large_intestine: "Penyerapan semula air di usus besar...",
+                            anus: "Penyahtinjaan melalui rektum & dubur..."
+                        };
+                        document.getElementById('current-stage-text').textContent = stageNames[updatedOrgan] || "Sedang bergerak...";
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Mulakan enjin 3D setelah tingkap selesai dimuatkan
+        window.onload = function() {
+            init3D();
+            updateFoodAppearance();
+            selectOrgan('mouth');
+            animate3D();
+        };
+    </script>
+</body>
+</html>
